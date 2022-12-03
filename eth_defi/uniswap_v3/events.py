@@ -103,6 +103,7 @@ def decode_pool_created(log: LogResult) -> dict:
         {
             "factory_contract_address": log["address"],
             "pool_contract_address": convert_uint256_bytes_to_address(pool_contract_address),
+            "tick_spacing": convert_int256_bytes_to_int(tick_spacing),
             "fee": convert_uint256_string_to_int(fee),
             "token0_symbol": token0.symbol,
             "token0_address": token0_address,
@@ -112,6 +113,37 @@ def decode_pool_created(log: LogResult) -> dict:
     )
     return result
 
+def decode_initialize(log: LogResult):
+    result = _decode_base(log)
+    sqrt_price_x96, tick = decode_data(log["data"])
+    
+    result.update({
+        "pool_contract_address": log['address'],
+        "sqrt_price_x96": convert_int256_bytes_to_int(sqrt_price_x96),
+        "tick": convert_int256_bytes_to_int(tick, signed=True),
+    })
+    
+    return result
+
+def decode_collect(log: LogResult):
+    result = _decode_base(log)
+    event_signature, owner, tick_lower, tick_upper = log["topics"]
+    _owner, amount0, amount1 = decode_data(log["data"])
+
+    result.update({
+        "pool_contract_address": log['address'],
+        "owner": owner,
+        "tick_lower": convert_uint256_string_to_int(tick_lower, signed=True),
+        "tick_upper": convert_uint256_string_to_int(tick_upper, signed=True),
+        "amount0": convert_int256_bytes_to_int(amount0),
+        "amount1": convert_int256_bytes_to_int(amount1),
+    })
+    
+    return result
+
+def decode_flash(log: LogResult):
+    result = _decode_base(log)
+    assert False        # never seen
 
 def decode_swap(log: LogResult) -> dict:
     """Process swap event. The event signature is:
@@ -231,6 +263,7 @@ def get_event_mapping(web3: Web3) -> dict:
                 "log_index",
                 "factory_contract_address",
                 "pool_contract_address",
+                "tick_spacing",
                 "fee",
                 "token0_address",
                 "token0_symbol",
@@ -239,6 +272,53 @@ def get_event_mapping(web3: Web3) -> dict:
             ],
             "decode_function": decode_pool_created,
         },
+        "Initialize": {
+            "contract_event": Pool.events.Initialize,
+            "field_names": [
+                "block_number",
+                "timestamp",
+                "tx_hash",
+                "log_index",
+                "pool_contract_address",
+                "sqrt_price_x96",
+                "tick"
+            ],
+            "decode_function": decode_initialize,
+        },
+        "Collect": {
+            "contract_event": Pool.events.Collect,
+            "field_names":[
+                "block_number",
+                "timestamp",
+                "tx_hash",
+                "log_index",
+                "pool_contract_address",
+                "owner",
+                "tick_lower",
+                "tick_upper",
+                "amount0",
+                "amount1",
+            ],
+            "decode_function": decode_collect,
+        },
+        
+        "Flash": {
+            "contract_event": Pool.events.Flash,
+            "field_names":[
+                "block_number",
+                "timestamp",
+                "tx_hash",
+                "log_index",
+                "sender",
+                "recipient",
+                "amount0",
+                "amount1",
+                "paid0",
+                "paid1"
+            ],
+            "decode_function": decode_flash,
+        },
+        
         "Swap": {
             "contract_event": Pool.events.Swap,
             "field_names": [
